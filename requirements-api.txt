@@ -1,0 +1,9 @@
+fastapi
+joblib
+loguru
+numpy
+pandas
+python-dotenv
+scikit-learn
+typer
+uvicorn

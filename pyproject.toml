@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telco-churn-mlops-demo"
+version = "0.1.0"
+description = "MLOps demo project for Telco Customer Churn."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "ADS II" },
+]
+
+[tool.black]
+line-length = 99
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+  "unit: fast tests for isolated functions",
+  "integration: tests that exercise interactions between multiple components",
+]
