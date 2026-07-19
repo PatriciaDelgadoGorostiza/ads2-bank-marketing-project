@@ -1,0 +1,15 @@
+{
+  "model_name": "XGBoost default",
+  "model_class": "XGBClassifier",
+  "selected_by": "highest holdout F1 in xgboost_comparison_df",
+  "params": {
+    "n_estimators": null,
+    "learning_rate": null,
+    "max_depth": null,
+    "min_child_weight": null,
+    "subsample": null,
+    "colsample_bytree": null,
+    "gamma": null,
+    "reg_lambda": null
+  }
+}
