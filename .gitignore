@@ -1,0 +1,13 @@
+
+# Local MLflow files
+mlflow.db
+mlruns/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Generated pipeline artifacts
+models/*_XGBClassifier_model.joblib
+models/*_preprocessor.joblib
+models/model_manifest.json
