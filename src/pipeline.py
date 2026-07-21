@@ -9,8 +9,8 @@ from pathlib import Path
 import pandas as pd
 
 from src.config import MODELS_DIR, PROCESSED_DATA_DIR, PROJ_ROOT, RAW_DATA_DIR
-from src.dataset import clean_telco_data, load_raw_data
-from src.evaluation import DEFAULT_BUSINESS_PARAMS, evaluate_classifier
+from src.dataset import clean_bank_marketing_data, load_raw_data
+from src.evaluation import evaluate_classifier
 from src.features import (
     create_business_features,
     create_train_test_split,
@@ -33,12 +33,7 @@ from src.modeling.train import (
 
 @dataclass
 class TrainingPipelineResult:
-    """Return object for the training pipeline.
-
-    The local model and preprocessor paths are needed for the inference pipeline.
-    The optional MLflow run ID links the same artifacts and metrics to experiment
-    tracking.
-    """
+    """Return object containing the artifacts created by the training pipeline."""
 
     model_path: Path
     preprocessor_path: Path
@@ -58,12 +53,8 @@ def _log_training_run_to_mlflow(
     experiment_name: str,
     run_name: str,
 ) -> str:
-    """Log training parameters, metrics, and artifacts to MLflow.
+    """Log training parameters, metrics, and artifacts to MLflow."""
 
-    MLflow stores the run metadata and copies of the generated artifacts. The
-    local files in `models/` are still returned by the training pipeline because
-    the following inference step can use them directly.
-    """
     import mlflow
 
     mlflow.set_tracking_uri(tracking_uri)
@@ -72,72 +63,93 @@ def _log_training_run_to_mlflow(
     metric_values = {
         key: value
         for key, value in metrics.items()
-        if isinstance(value, Real) and key not in {"threshold"}
+        if isinstance(value, Real) and key != "threshold"
     }
 
     with mlflow.start_run(run_name=run_name) as run:
         mlflow.set_tags(
             {
-                "project": "telco_churn",
+                "project": "bank-marketing",
                 "stage": "training_pipeline",
                 "model_name": model_name,
                 "model_class": model.__class__.__name__,
             }
         )
+
         mlflow.log_param("model_name", model_name)
         mlflow.log_param("model_class", model.__class__.__name__)
+
         if model_params:
             mlflow.log_params(model_params)
-        mlflow.log_params(DEFAULT_BUSINESS_PARAMS)
+
         mlflow.log_metrics(metric_values)
         mlflow.log_artifact(str(model_path), artifact_path="model")
-        mlflow.log_artifact(str(preprocessor_path), artifact_path="preprocessor")
+        mlflow.log_artifact(
+            str(preprocessor_path),
+            artifact_path="preprocessor",
+        )
 
         return run.info.run_id
 
 
 def run_training_pipeline(
-    raw_data_path: Path = RAW_DATA_DIR / "Telco-Customer-Churn.csv",
+    raw_data_path: Path = RAW_DATA_DIR / "bank-full.csv",
     processed_data_dir: Path = PROCESSED_DATA_DIR,
     models_dir: Path = MODELS_DIR,
     model=None,
     model_params: dict | None = None,
-    model_name: str = "XGBoost",
+    model_name: str = "XGBoost Default",
     save_processed_data: bool = True,
     log_to_mlflow: bool = False,
     mlflow_tracking_uri: str | None = None,
-    mlflow_experiment_name: str = "telco-churn",
+    mlflow_experiment_name: str = "bank-marketing",
     manifest_path: Path | None = None,
 ) -> TrainingPipelineResult:
-    """Run the Telco Churn training pipeline from raw data to saved artifacts.
+    """Run the Bank Marketing training pipeline from raw data to saved artifacts.
 
-    The pipeline does not perform hyperparameter optimization. It trains one
-    defined model configuration and creates the artifacts needed for inference.
+    The pipeline loads and cleans the raw data, creates business features,
+    performs the train/test split, fits the preprocessing transformations,
+    trains one model configuration, evaluates it, and saves the artifacts
+    required for later inference.
+
+    The pipeline does not perform hyperparameter optimization.
 
     Parameters
     ----------
     model:
-        Optional preconfigured model object. Use this when a caller already
-        built the estimator elsewhere.
+        Optional preconfigured model object.
+
     model_params:
-        Optional XGBoost hyperparameters, for example the selected parameters
-        from hyperparameter optimization. If `model` is not provided and
-        `model_params` is given, the pipeline builds an XGBoost model from these
-        parameters. If neither is provided, it falls back to default XGBoost.
+        Optional XGBoost hyperparameters. If no model object is supplied,
+        these parameters are used to build an XGBoost classifier.
+
     log_to_mlflow:
-        If True, metrics, selected parameters, and generated artifacts are logged
-        to the configured MLflow experiment.
+        If True, the metrics, model parameters, model artifact, and
+        preprocessor artifact are logged to MLflow.
     """
+
     if model is not None and model_params is not None:
-        raise ValueError("Pass either a model object or model_params, not both.")
+        raise ValueError(
+            "Pass either a model object or model_params, not both."
+        )
 
     raw_df = load_raw_data(raw_data_path)
-    cleaned_df = clean_telco_data(raw_df)
+    cleaned_df = clean_bank_marketing_data(raw_df)
     featured_df = create_business_features(cleaned_df)
 
     X, y = split_features_and_target(featured_df)
-    X_train, X_test, y_train, y_test = create_train_test_split(X, y)
-    X_train_processed, X_test_processed, feature_names, preprocessor = preprocess_train_test(
+
+    X_train, X_test, y_train, y_test = create_train_test_split(
+        X,
+        y,
+    )
+
+    (
+        X_train_processed,
+        X_test_processed,
+        feature_names,
+        preprocessor,
+    ) = preprocess_train_test(
         X_train,
         X_test,
     )
@@ -156,14 +168,25 @@ def run_training_pipeline(
     if model is None:
         if model_params is None:
             model = build_default_xgboost()
-            model_params_to_log = None
         else:
             model = build_xgboost_with_params(model_params)
-            model_params_to_log = model_params
-    else:
-        model_params_to_log = model_params
 
-    model.fit(X_train_processed, y_train)
+    if model_params is not None:
+        model_params_to_log = model_params
+    elif hasattr(model, "get_params"):
+        model_params_to_log = {
+            key: value
+            for key, value in model.get_params().items()
+            if value is not None
+        }
+    else:
+        model_params_to_log = None
+
+    model.fit(
+        X_train_processed,
+        y_train,
+    )
+
     metrics = evaluate_classifier(
         model=model,
         model_name=model_name,
@@ -172,11 +195,16 @@ def run_training_pipeline(
         X_test=X_test_processed,
         y_test=y_test,
         threshold=0.5,
-        business_params=DEFAULT_BUSINESS_PARAMS,
     )
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    preprocessor_path = save_preprocessor(preprocessor, models_dir, timestamp=timestamp)
+
+    preprocessor_path = save_preprocessor(
+        preprocessor,
+        models_dir,
+        timestamp=timestamp,
+    )
+
     model_path = save_model(
         model=model,
         output_dir=models_dir,
@@ -186,9 +214,13 @@ def run_training_pipeline(
     )
 
     mlflow_run_id = None
+
     if log_to_mlflow:
         if mlflow_tracking_uri is None:
-            mlflow_tracking_uri = f"sqlite:///{PROJ_ROOT / 'mlflow.db'}"
+            mlflow_tracking_uri = (
+                f"sqlite:///{PROJ_ROOT / 'mlflow.db'}"
+            )
+
         mlflow_run_id = _log_training_run_to_mlflow(
             model=model,
             model_name=model_name,
@@ -198,11 +230,16 @@ def run_training_pipeline(
             metrics=metrics,
             tracking_uri=mlflow_tracking_uri,
             experiment_name=mlflow_experiment_name,
-            run_name=f"{timestamp}_{model.__class__.__name__}_training_pipeline",
+            run_name=(
+                f"{timestamp}_"
+                f"{model.__class__.__name__}_"
+                "training_pipeline"
+            ),
         )
 
     if manifest_path is None:
         manifest_path = models_dir / "model_manifest.json"
+
     manifest = {
         "model_name": model_name,
         "model_class": model.__class__.__name__,
@@ -212,9 +249,21 @@ def run_training_pipeline(
         "threshold": 0.5,
         "mlflow_run_id": mlflow_run_id,
     }
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    with manifest_path.open("w", encoding="utf-8") as file:
-        json.dump(manifest, file, indent=2)
+
+    manifest_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with manifest_path.open(
+        "w",
+        encoding="utf-8",
+    ) as file:
+        json.dump(
+            manifest,
+            file,
+            indent=2,
+        )
 
     return TrainingPipelineResult(
         model_path=model_path,
@@ -225,15 +274,21 @@ def run_training_pipeline(
     )
 
 
-def load_model_manifest(manifest_path: Path = MODELS_DIR / "model_manifest.json") -> dict:
-    """Load the local serving manifest that points to model and preprocessor artifacts."""
+def load_model_manifest(
+    manifest_path: Path = MODELS_DIR / "model_manifest.json",
+) -> dict:
+    """Load the manifest pointing to the model and preprocessor artifacts."""
+
     if not manifest_path.exists():
         raise FileNotFoundError(
             f"Model manifest not found: {manifest_path}. "
-            "Run the training pipeline first to create serving artifacts."
+            "Run the training pipeline first to create inference artifacts."
         )
 
-    with manifest_path.open("r", encoding="utf-8") as file:
+    with manifest_path.open(
+        "r",
+        encoding="utf-8",
+    ) as file:
         manifest = json.load(file)
 
     model_path = Path(manifest["model_path"])
@@ -241,11 +296,16 @@ def load_model_manifest(manifest_path: Path = MODELS_DIR / "model_manifest.json"
 
     if not model_path.exists():
         model_path = manifest_path.parent / model_path.name
+
     if not preprocessor_path.exists():
-        preprocessor_path = manifest_path.parent / preprocessor_path.name
+        preprocessor_path = (
+            manifest_path.parent
+            / preprocessor_path.name
+        )
 
     manifest["model_path"] = model_path
     manifest["preprocessor_path"] = preprocessor_path
+
     return manifest
 
 
@@ -255,36 +315,64 @@ def run_inference_pipeline(
     preprocessor_path: Path,
     threshold: float = 0.5,
 ) -> pd.DataFrame:
-    """Run inference for new Telco observations using saved training artifacts.
+    """Run inference for new Bank Marketing observations.
 
-    The function expects raw Telco-style input rows. It recreates deterministic
-    business features, applies the fitted preprocessor from training, loads the
-    fitted model, and returns probabilities plus class predictions.
+    The function creates the same deterministic business features used during
+    training, applies the fitted preprocessor, loads the trained model, and
+    returns subscription probabilities and class predictions.
     """
+
     if isinstance(input_data, Path):
-        input_df = pd.read_csv(input_data)
+        input_df = pd.read_csv(
+            input_data,
+            sep=";",
+        )
+
+        if input_df.shape[1] == 1:
+            input_df = pd.read_csv(input_data)
     else:
         input_df = input_data.copy()
 
-    preprocessor = load_preprocessor(preprocessor_path)
-    model = load_model(model_path)
+    preprocessor = load_preprocessor(
+        preprocessor_path
+    )
 
-    X = prepare_inference_features(input_df)
-    X_processed = transform_with_preprocessor(preprocessor, X)
-    predictions = predict(model, X_processed, threshold=threshold)
+    model = load_model(
+        model_path
+    )
 
-    if "customerID" in input_df.columns:
-        predictions.insert(0, "customerID", input_df["customerID"].values)
+    X = prepare_inference_features(
+        input_df
+    )
+
+    X_processed = transform_with_preprocessor(
+        preprocessor,
+        X,
+    )
+
+    predictions = predict(
+        model,
+        X_processed,
+        threshold=threshold,
+    )
 
     return predictions.reset_index(drop=True)
 
 
-def load_model_params(params_path: Path) -> dict:
+def load_model_params(
+    params_path: Path,
+) -> dict:
     """Load selected model parameters from the JSON artifact created in Notebook 05."""
-    if not params_path.exists():
-        raise FileNotFoundError(f"Model parameter file not found: {params_path}")
 
-    with params_path.open("r", encoding="utf-8") as file:
+    if not params_path.exists():
+        raise FileNotFoundError(
+            f"Model parameter file not found: {params_path}"
+        )
+
+    with params_path.open(
+        "r",
+        encoding="utf-8",
+    ) as file:
         model_config = json.load(file)
 
     return model_config["params"]

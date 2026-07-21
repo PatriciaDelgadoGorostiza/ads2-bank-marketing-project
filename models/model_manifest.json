@@ -1,0 +1,9 @@
+{
+  "model_name": "XGBoost tuned",
+  "model_class": "XGBClassifier",
+  "created_at": "20260721_171134",
+  "model_path": "/home/patri/master/ads2-bank-marketing-project/models/20260721_171134_XGBClassifier_model.joblib",
+  "preprocessor_path": "/home/patri/master/ads2-bank-marketing-project/models/20260721_171134_preprocessor.joblib",
+  "threshold": 0.5,
+  "mlflow_run_id": "11dd1326e2d94f8188f048af7fb43240"
+}
