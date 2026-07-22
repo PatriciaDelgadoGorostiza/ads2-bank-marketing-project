@@ -2,7 +2,11 @@ import json
 
 import pytest
 
-from src.serving.monitoring import initialize_monitoring_db, load_prediction_logs, log_prediction
+from src.serving.monitoring import (
+    initialize_monitoring_db,
+    load_prediction_logs,
+    log_prediction,
+)
 
 
 @pytest.mark.unit
@@ -18,32 +22,54 @@ def test_initialize_monitoring_db_creates_sqlite_file(tmp_path):
 @pytest.mark.unit
 def test_log_prediction_stores_request_and_prediction(tmp_path):
     db_path = tmp_path / "predictions.db"
+
     request_payload = {
-        "customerID": "customer-1",
-        "tenure": 12,
-        "MonthlyCharges": 80.0,
-        "TotalCharges": 960.0,
-        "Contract": "Month-to-month",
-        "InternetService": "DSL",
-        "PaymentMethod": "Electronic check",
+        "age": 40,
+        "job": "management",
+        "marital": "married",
+        "education": "tertiary",
+        "default": "no",
+        "balance": 1500,
+        "housing": "yes",
+        "loan": "no",
+        "contact": "cellular",
+        "day": 15,
+        "month": "may",
+        "campaign": 2,
+        "pdays": -1,
+        "previous": 0,
+        "poutcome": "unknown",
     }
+
     prediction_payload = {
-        "churn_probability": 0.73,
-        "churn_prediction": 1,
-        "model_name": "Test model",
+        "subscription_probability": 0.73,
+        "subscription_prediction": 1,
+        "model_name": "XGBoost Default",
         "model_version": "test-version",
         "threshold": 0.5,
     }
 
-    log_prediction(request_payload, prediction_payload, db_path=db_path)
+    log_prediction(
+        request_payload,
+        prediction_payload,
+        db_path=db_path,
+    )
+
     logs = load_prediction_logs(db_path)
 
     assert len(logs) == 1
+
     row = logs.iloc[0]
-    assert row["customer_id"] == "customer-1"
-    assert row["tenure"] == 12
-    assert row["monthly_charges"] == 80.0
-    assert row["contract"] == "Month-to-month"
-    assert row["churn_probability"] == 0.73
-    assert row["churn_prediction"] == 1
-    assert json.loads(row["request_json"])["customerID"] == "customer-1"
+
+    assert row["subscription_probability"] == pytest.approx(0.73)
+    assert row["subscription_prediction"] == 1
+    assert row["model_name"] == "XGBoost Default"
+    assert row["model_version"] == "test-version"
+    assert row["threshold"] == pytest.approx(0.5)
+
+    stored_request = json.loads(row["request_json"])
+
+    assert stored_request["age"] == 40
+    assert stored_request["job"] == "management"
+    assert stored_request["balance"] == 1500
+    assert stored_request["contact"] == "cellular"

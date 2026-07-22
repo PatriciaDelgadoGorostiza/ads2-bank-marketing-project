@@ -15,9 +15,9 @@ from src.serving.schemas import (
 )
 
 app = FastAPI(
-    title="Telco Churn Prediction API",
+    title="Bank Marketing Subscription Prediction API",
     description=(
-        "Local FastAPI service for one-customer real-time churn predictions. "
+        "Local FastAPI service for one-customer term-deposit subscription predictions. "
         "The OpenAPI schema documents the request and response contract."
     ),
     version="0.1.0",
@@ -26,13 +26,7 @@ app = FastAPI(
 
 @lru_cache(maxsize=1)
 def get_serving_manifest() -> dict:
-    """Load and cache the model manifest once per API process.
-
-    The actual artifact source is delegated to `src.serving.artifacts`:
-
-    - local Docker Compose demo: read `models/model_manifest.json`;
-    - future cloud deployment: read `MODEL_MANIFEST_URI` and download artifacts.
-    """
+    """Load and cache the model manifest once per API process."""
     return load_serving_manifest()
 
 
@@ -63,10 +57,11 @@ def model_info() -> ModelInfoResponse:
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict(customer: CustomerFeatures) -> PredictionResponse:
-    """Predict churn probability for one customer."""
+    """Predict term-deposit subscription probability for one customer."""
     try:
         manifest = get_serving_manifest()
         input_df = pd.DataFrame([customer.model_dump()])
+
         predictions = run_inference_pipeline(
             input_data=input_df,
             model_path=manifest["model_path"],
@@ -79,14 +74,15 @@ def predict(customer: CustomerFeatures) -> PredictionResponse:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     prediction = predictions.iloc[0]
+
     response = PredictionResponse(
-        customerID=prediction.get("customerID"),
-        churn_probability=float(prediction["churn_probability"]),
-        churn_prediction=int(prediction["churn_prediction"]),
+        subscription_probability=float(prediction["subscription_probability"]),
+        subscription_prediction=int(prediction["subscription_prediction"]),
         threshold=float(manifest["threshold"]),
         model_name=manifest["model_name"],
         model_version=manifest["created_at"],
     )
+
     try:
         log_prediction(
             request_payload=customer.model_dump(),
@@ -94,4 +90,5 @@ def predict(customer: CustomerFeatures) -> PredictionResponse:
         )
     except Exception as exc:
         logger.warning(f"Prediction monitoring log failed: {exc}")
+
     return response

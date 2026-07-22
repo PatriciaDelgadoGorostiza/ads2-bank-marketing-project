@@ -3,31 +3,27 @@ import pytest
 
 
 @pytest.fixture
-def minimal_telco_input() -> pd.DataFrame:
-    """Small Telco-style input row without the target column."""
+def minimal_bank_marketing_input() -> pd.DataFrame:
+    """Small Bank Marketing input sample without target or leakage columns."""
+
     return pd.DataFrame(
         [
             {
-                "customerID": "A",
-                "gender": "Female",
-                "SeniorCitizen": 0,
-                "Partner": "Yes",
-                "Dependents": "No",
-                "tenure": 10,
-                "PhoneService": "Yes",
-                "MultipleLines": "No",
-                "InternetService": "DSL",
-                "OnlineSecurity": "Yes",
-                "OnlineBackup": "No",
-                "DeviceProtection": "Yes",
-                "TechSupport": "No",
-                "StreamingTV": "No",
-                "StreamingMovies": "Yes",
-                "Contract": "Month-to-month",
-                "PaperlessBilling": "Yes",
-                "PaymentMethod": "Electronic check",
-                "MonthlyCharges": 80.0,
-                "TotalCharges": 700.0,
+                "age": 40,
+                "job": "management",
+                "marital": "married",
+                "education": "tertiary",
+                "default": "no",
+                "balance": 1500,
+                "housing": "yes",
+                "loan": "no",
+                "contact": "cellular",
+                "day": 15,
+                "month": "may",
+                "campaign": 2,
+                "pdays": -1,
+                "previous": 0,
+                "poutcome": "unknown",
             }
         ]
     )

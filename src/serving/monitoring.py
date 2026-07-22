@@ -30,16 +30,17 @@ def initialize_monitoring_db(db_path: Path | None = None) -> Path:
             CREATE TABLE IF NOT EXISTS prediction_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp_utc TEXT NOT NULL,
-                customer_id TEXT,
                 request_json TEXT NOT NULL,
-                tenure REAL,
-                monthly_charges REAL,
-                total_charges REAL,
-                contract TEXT,
-                internet_service TEXT,
-                payment_method TEXT,
-                churn_probability REAL NOT NULL,
-                churn_prediction INTEGER NOT NULL,
+                age REAL,
+                balance REAL,
+                campaign REAL,
+                pdays REAL,
+                previous REAL,
+                job TEXT,
+                contact TEXT,
+                month TEXT,
+                subscription_probability REAL NOT NULL,
+                subscription_prediction INTEGER NOT NULL,
                 model_name TEXT NOT NULL,
                 model_version TEXT NOT NULL,
                 threshold REAL NOT NULL
@@ -55,6 +56,7 @@ def _as_float_or_none(value: Any) -> float | None:
     """Convert monitoring feature values to floats where possible."""
     if value in [None, ""]:
         return None
+
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -66,12 +68,7 @@ def log_prediction(
     prediction_payload: dict[str, Any],
     db_path: Path | None = None,
 ) -> None:
-    """Append one incoming request and its prediction to the monitoring log.
-
-    The full request is stored as JSON for traceability. A small set of important
-    features is also stored as regular columns so simple drift checks can query
-    them without parsing JSON first.
-    """
+    """Append one Bank Marketing request and its prediction to the monitoring log."""
     db_path = initialize_monitoring_db(db_path)
 
     with sqlite3.connect(db_path) as connection:
@@ -79,34 +76,36 @@ def log_prediction(
             """
             INSERT INTO prediction_logs (
                 timestamp_utc,
-                customer_id,
                 request_json,
-                tenure,
-                monthly_charges,
-                total_charges,
-                contract,
-                internet_service,
-                payment_method,
-                churn_probability,
-                churn_prediction,
+                age,
+                balance,
+                campaign,
+                pdays,
+                previous,
+                job,
+                contact,
+                month,
+                subscription_probability,
+                subscription_prediction,
                 model_name,
                 model_version,
                 threshold
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 datetime.now(timezone.utc).isoformat(),
-                request_payload.get("customerID"),
                 json.dumps(request_payload, sort_keys=True),
-                _as_float_or_none(request_payload.get("tenure")),
-                _as_float_or_none(request_payload.get("MonthlyCharges")),
-                _as_float_or_none(request_payload.get("TotalCharges")),
-                request_payload.get("Contract"),
-                request_payload.get("InternetService"),
-                request_payload.get("PaymentMethod"),
-                float(prediction_payload["churn_probability"]),
-                int(prediction_payload["churn_prediction"]),
+                _as_float_or_none(request_payload.get("age")),
+                _as_float_or_none(request_payload.get("balance")),
+                _as_float_or_none(request_payload.get("campaign")),
+                _as_float_or_none(request_payload.get("pdays")),
+                _as_float_or_none(request_payload.get("previous")),
+                request_payload.get("job"),
+                request_payload.get("contact"),
+                request_payload.get("month"),
+                float(prediction_payload["subscription_probability"]),
+                int(prediction_payload["subscription_prediction"]),
                 prediction_payload["model_name"],
                 prediction_payload["model_version"],
                 float(prediction_payload["threshold"]),
@@ -118,8 +117,12 @@ def log_prediction(
 def load_prediction_logs(db_path: Path | None = None) -> pd.DataFrame:
     """Load prediction logs from the local SQLite monitoring database."""
     db_path = db_path or get_monitoring_db_path()
+
     if not db_path.exists():
         return pd.DataFrame()
 
     with sqlite3.connect(db_path) as connection:
-        return pd.read_sql_query("SELECT * FROM prediction_logs ORDER BY id", connection)
+        return pd.read_sql_query(
+            "SELECT * FROM prediction_logs ORDER BY id",
+            connection,
+        )

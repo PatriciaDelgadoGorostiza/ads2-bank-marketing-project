@@ -1,39 +1,34 @@
 import pandas as pd
 import pytest
 
-from src.dataset import clean_telco_data
+from src.dataset import clean_bank_marketing_data
 
 
 @pytest.mark.unit
-def test_clean_telco_data_converts_total_charges_and_target():
+def test_clean_bank_marketing_data_encodes_target_and_removes_duration():
     raw_df = pd.DataFrame(
         {
-            "customerID": ["A", "B"],
-            "TotalCharges": ["29.85", " "],
-            "tenure": [1, 0],
-            "MonthlyCharges": [29.85, 19.85],
-            "Churn": ["No", "Yes"],
+            "age": [35, 48],
+            "duration": [120, 240],
+            "y": ["no", "yes"],
         }
     )
 
-    cleaned_df = clean_telco_data(raw_df)
+    cleaned_df = clean_bank_marketing_data(raw_df)
 
-    assert cleaned_df.loc[0, "TotalCharges"] == 29.85
-    assert cleaned_df.loc[1, "TotalCharges"] == 0.0
-    assert cleaned_df["ChurnBinary"].tolist() == [0, 1]
+    assert cleaned_df["y_binary"].tolist() == [0, 1]
+    assert "duration" not in cleaned_df.columns
 
 
 @pytest.mark.unit
-def test_clean_telco_data_rejects_missing_total_charges_for_existing_customer():
+def test_clean_bank_marketing_data_rejects_unexpected_target_values():
     raw_df = pd.DataFrame(
         {
-            "customerID": ["A"],
-            "TotalCharges": [" "],
-            "tenure": [3],
-            "MonthlyCharges": [29.85],
-            "Churn": ["No"],
+            "age": [35],
+            "duration": [120],
+            "y": ["maybe"],
         }
     )
 
-    with pytest.raises(ValueError, match="missing TotalCharges"):
-        clean_telco_data(raw_df)
+    with pytest.raises(ValueError, match="Unexpected target values"):
+        clean_bank_marketing_data(raw_df)
