@@ -11,3 +11,4 @@ __pycache__/
 models/*_XGBClassifier_model.joblib
 models/*_preprocessor.joblib
 models/model_manifest.json
+monitoring/*.db

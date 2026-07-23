@@ -5,16 +5,16 @@ import typer
 from src.config import MODELS_DIR, PROCESSED_DATA_DIR, RAW_DATA_DIR
 from src.pipeline import load_model_params, run_inference_pipeline, run_training_pipeline
 
-app = typer.Typer(help="Run the Telco Churn training and inference pipelines.")
+app = typer.Typer(help="Run the Bank Marketing training and inference pipelines.")
 
 
 @app.command("train")
 def train_command(
-    raw_data_path: Path = RAW_DATA_DIR / "Telco-Customer-Churn.csv",
+    raw_data_path: Path = RAW_DATA_DIR / "bank-full.csv",
     params_path: Path | None = None,
     processed_data_dir: Path = PROCESSED_DATA_DIR,
     models_dir: Path = MODELS_DIR,
-    model_name: str = "XGBoost tuned",
+    model_name: str = "XGBoost Default",
     save_processed_data: bool = False,
     log_to_mlflow: bool = True,
 ) -> None:
