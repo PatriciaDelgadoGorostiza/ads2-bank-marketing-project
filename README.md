@@ -1,22 +1,36 @@
-# Telco Customer Churn MLOps Demo
+# Bank Marketing Subscription MLOps Demo
 
-This repository is a notebook-first teaching project for applied MLOps.
+This repository contains a notebook-first MLOps prototype for predicting whether
+a bank customer is likely to subscribe to a term deposit after a telephone
+marketing campaign.
 
-The project starts with exploratory model development in notebooks and then evolves into a small but complete ML application:
+The project starts with exploratory model development in notebooks and then
+evolves into a small local ML application:
 
 - data exploration, cleaning, and feature engineering;
 - model training, evaluation, tuning, and error slicing;
 - experiment tracking with MLflow;
-- refactoring into reusable Python modules;
+- reusable Python modules;
 - reproducible training and inference pipelines;
 - automated tests;
-- local FastAPI serving with Swagger/OpenAPI;
-- a simple Streamlit frontend;
+- local FastAPI serving and a Streamlit frontend;
 - Docker and Docker Compose;
-- GitHub Actions CI with Docker image build and registry push;
-- a minimal monitoring and drift demo.
+- GitHub Actions CI;
+- a basic monitoring and drift demo.
 
-The detailed course documentation will be maintained separately with MkDocs. This README is the practical entry point for the repository.
+The main goal is not to build the best possible model, but to demonstrate a
+locally executable and understandable MLOps workflow.
+
+## Business Problem
+
+Telephone marketing campaigns require time and resources.
+
+This prototype estimates whether a customer is likely to subscribe to a term
+deposit based on historical customer and campaign information. The prediction
+could help prioritize customers for future campaigns.
+
+The model predicts subscription likelihood. It does not prove that contacting a
+customer causes a subscription.
 
 ## Repository Structure
 
@@ -25,20 +39,18 @@ The detailed course documentation will be maintained separately with MkDocs. Thi
 ├── app/                    # Streamlit frontend
 ├── data/
 │   ├── raw/                # Raw input data
-│   ├── interim/            # Intermediate data artifacts
-│   ├── processed/          # Processed train/test data artifacts
-│   └── external/           # External exercise data
-├── models/                 # Local generated model artifacts, ignored by Git
-├── monitoring/             # Local SQLite monitoring database, ignored by Git
-├── notebooks/              # Main teaching notebooks
-│   └── exercises/          # Student exercises
+│   ├── interim/            # Cleaned intermediate data
+│   └── processed/          # Processed train/test data
+├── models/                 # Generated model artifacts
+├── monitoring/             # Local prediction logs
+├── notebooks/              # Main project notebooks
 ├── references/             # Background material
 ├── reports/
 │   ├── figures/            # Generated figures
-│   └── model_results/      # Saved metrics, predictions, and tuning results
-├── src/                    # Refactored Python code
+│   └── model_results/      # Metrics, predictions, and tuning results
+├── src/                    # Reusable Python code
 │   ├── modeling/           # Training and prediction helpers
-│   └── serving/            # FastAPI schemas, API, artifacts, monitoring
+│   └── serving/            # FastAPI and monitoring code
 ├── tests/                  # Unit and integration tests
 ├── Dockerfile.api
 ├── Dockerfile.streamlit
@@ -52,30 +64,67 @@ The detailed course documentation will be maintained separately with MkDocs. Thi
 
 ## Data
 
-The project uses the Telco Customer Churn dataset.
+The project uses the UCI Bank Marketing dataset.
 
-Expected local raw data path:
+Expected local raw-data path:
 
 ```text
-data/raw/Telco-Customer-Churn.csv
+data/raw/bank-full.csv
 ```
 
-Raw data is treated as an immutable input. Generated data, model artifacts, MLflow runs, and monitoring logs are ignored by Git where appropriate.
+The dataset contains 45,211 records from telephone marketing campaigns conducted
+by a Portuguese banking institution.
+
+The target variable indicates whether a customer subscribed to a term deposit.
+It is imbalanced: approximately 11.7% of customers subscribed and 88.3% did not.
+
+The variable `duration` is removed before training because it is only known
+after the telephone call. Using it for customer prioritization would cause data
+leakage.
+
+The explicit category `unknown` and the value `pdays = -1` are preserved because
+they have a documented meaning in the dataset.
+
+## Model
+
+Logistic Regression, Decision Tree, and XGBoost were compared.
+
+XGBoost achieved the highest test F1 and was selected as the main model. Grid
+Search, Random Search, and Bayesian optimization were also tested, but none of
+the tuned configurations improved the test F1 of the default XGBoost model.
+
+Selected model:
+
+```text
+XGBoost Default
+```
+
+Main test metrics:
+
+```text
+Accuracy:  0.8934
+Precision: 0.5983
+Recall:    0.2703
+F1:        0.3724
+ROC-AUC:   0.7910
+```
+
+The main limitation is the low Recall: the model misses many actual
+subscribers.
 
 ## Environment Setup
 
-Use a dedicated Python environment for this module. The environment manager is not prescribed. `venv`, `uv` or another tool are all fine as long as the project dependencies are isolated from other projects.
+Use a dedicated Python environment for the project.
 
-After activating your environment, install the local development dependencies:
+After activating the environment, install the dependencies:
 
 ```bash
 pip install -r requirements.txt
 pip install -e .
 ```
 
-The smaller files `requirements-api.txt` and `requirements-streamlit.txt` are used for the Docker images. They keep the API and frontend containers smaller than the full local notebook environment.
-
-Detailed local setup instructions for Windows with WSL2, Linux, macOS, Docker, and VS Code will be covered in the separate MkDocs course documentation.
+The smaller files `requirements-api.txt` and
+`requirements-streamlit.txt` are used for the Docker images.
 
 ## Notebook Workflow
 
@@ -98,20 +147,40 @@ The main notebooks are intended to be followed in order:
 14_monitoring_and_drift_demo.ipynb
 ```
 
-The exercises are in:
+The notebooks cover the complete workflow from data exploration and model
+development to testing, serving, containerization, CI, and monitoring.
 
-```text
-notebooks/exercises/
+Reusable project logic is located in `src/`.
+
+## Training Pipeline
+
+Run the training pipeline from the repository root:
+
+```bash
+python -m src.cli train \
+  --params-path reports/model_results/05_selected_xgboost_params.json \
+  --no-save-processed-data \
+  --log-to-mlflow
 ```
 
-Students can select one exercise dataset and repeat parts of the workflow independently.
+The pipeline cleans the data, creates features, fits the preprocessor, trains
+the selected model, evaluates it, and saves the model and preprocessor in:
+
+```text
+models/
+```
+
+The model and preprocessor are saved together because inference data must use
+the same preprocessing rules as the training data.
 
 ## MLflow
 
 Start the local MLflow UI from the repository root:
 
 ```bash
-mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
+python -m mlflow ui \
+  --backend-store-uri sqlite:///mlflow.db \
+  --port 5000
 ```
 
 Then open:
@@ -120,77 +189,80 @@ Then open:
 http://127.0.0.1:5000
 ```
 
-The local MLflow database and run artifacts are ignored by Git. In a team setup, MLflow would usually be hosted centrally so that all team members can access the same experiment history.
+MLflow records model parameters, metrics, predictions, figures, and model
+artifacts.
+
+The local MLflow database and artifacts are ignored by Git.
 
 ## Tests
 
-Run the test suite from the repository root:
+Run the complete test suite:
 
 ```bash
-pytest
+python -m pytest
 ```
 
-Run one test file:
+The tests cover selected data-cleaning, feature-engineering, evaluation,
+prediction, API, CLI, and monitoring behavior.
 
-```bash
-pytest tests/test_serving_api.py
-```
-
-The tests cover selected data, feature, evaluation, pipeline, serving, and monitoring behavior.
+The current test suite contains 14 passing tests.
 
 ## Local API Serving
 
-The FastAPI app serves one-customer churn predictions and exposes a Swagger/OpenAPI UI.
-
-Start the API locally:
+Start the FastAPI service:
 
 ```bash
-uvicorn src.serving.api:app --reload --host 127.0.0.1 --port 8000
+uvicorn src.serving.api:app --reload --port 8000
 ```
 
-Open:
+Open Swagger UI:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-Important: the API needs a trained model manifest and artifacts in `models/`. These are generated by the training pipeline and are not committed to Git.
+Available endpoints:
+
+```text
+GET  /health
+GET  /model-info
+POST /predict
+```
+
+The API uses `models/model_manifest.json` to locate the current model and
+preprocessor.
 
 ## Streamlit Frontend
 
-Start the Streamlit frontend locally:
+Start FastAPI first and then run:
 
 ```bash
 streamlit run app/streamlit_app.py
 ```
 
-By default, Streamlit calls:
+Open:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8501
 ```
 
-For deployment or Docker Compose, configure the backend URL through the `API_URL` environment variable.
+Streamlit sends customer information to the FastAPI service and displays the
+returned subscription prediction.
 
 ## Docker Compose
 
-Build and run the API and Streamlit app together:
+Build and run FastAPI and Streamlit together:
 
 ```bash
 docker compose up --build
 ```
 
-Then open:
+Open:
 
 ```text
-FastAPI Swagger UI: http://127.0.0.1:8000/docs
-Streamlit app:      http://127.0.0.1:8501
+FastAPI Swagger: http://127.0.0.1:8000/docs
+Streamlit:       http://127.0.0.1:8501
 ```
-
-Docker Compose mounts:
-
-- `models/` read-only into the API container;
-- `monitoring/` as a writable folder for local prediction logs.
 
 Stop the services:
 
@@ -198,44 +270,58 @@ Stop the services:
 docker compose down
 ```
 
+Docker packages the application and its dependencies so that it can run more
+consistently in different environments.
+
 ## GitHub Actions
 
-The CI workflow in `.github/workflows/ci.yml` demonstrates:
+The CI workflow is stored in:
 
-- dependency installation;
-- test execution with `pytest`;
-- Docker image build;
-- API container smoke test;
-- optional image push to GitHub Container Registry on `main`.
+```text
+.github/workflows/ci.yml
+```
 
-There is no automated cloud deployment in this repository. Deployment options and governance concepts are planned for the separate MkDocs course documentation.
+It runs the tests, builds the Docker images, starts the API container, checks
+the `/health` endpoint, and publishes the API image to GitHub Container Registry on `main`.
+
+The workflow demonstrates CI and container delivery. It does not perform a real
+cloud deployment.
 
 ## Monitoring and Drift Demo
 
-The API logs successful prediction requests to a local SQLite database:
+Successful API predictions are logged locally in:
 
 ```text
 monitoring/predictions.db
 ```
 
-Notebook `14_monitoring_and_drift_demo.ipynb` compares current logged requests with reference data and demonstrates:
+Notebook `14_monitoring_and_drift_demo.ipynb` compares current inference data
+with reference data and demonstrates basic data-quality, drift, and prediction
+monitoring.
 
-- request volume over time;
-- prediction score and confidence monitoring;
-- KS tests for continuous variables;
-- chi-square tests for categorical variables;
-- simple visual drift signals.
+If no API logs are available, it creates a synthetic sample for demonstration.
 
-If no real API logs exist yet, the notebook creates a synthetic demo sample so that the monitoring workflow remains executable.
+Drift is an investigation signal. It does not automatically prove that model
+performance has become worse.
+
+## Limitations
+
+This project is a local prototype, not a production system.
+
+It does not include cloud deployment, authentication, a central model registry,
+automated retraining, rollback, or production alerting. Model Recall is also
+limited, and part of the monitoring demonstration uses synthetic data.
 
 ## Generated Artifacts and Git
 
-The following artifacts are generated locally and are intentionally ignored by Git:
+The following local artifacts are ignored by Git where appropriate:
 
-- `models/*`
-- `mlruns/`
-- `mlflow.db`
-- `monitoring/*`
-- generated processed/interim data files
-
-Keep source code, notebooks, tests, configuration, and small result summaries under version control. Keep large or environment-specific artifacts outside Git.
+```text
+models/
+mlruns/
+mlflow.db
+monitoring/
+generated interim and processed data
+```
+Source code, notebooks, tests, configuration, and workflow files remain under
+version control.
