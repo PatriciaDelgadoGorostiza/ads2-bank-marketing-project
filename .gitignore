@@ -12,3 +12,7 @@ models/*_XGBClassifier_model.joblib
 models/*_preprocessor.joblib
 models/model_manifest.json
 monitoring/*.db
+
+# Environment variables and secrets
+.env
+.env.*
